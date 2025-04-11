@@ -17,7 +17,7 @@ class UserBase(BaseModel):
     nama: str
     alamat: str
     telepon: str
-    id_jabatan: str
+    id_jabatan: int
 
 
 class UserCreate(UserBase):

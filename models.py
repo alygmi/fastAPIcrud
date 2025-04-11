@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Text, ForeignKey
 from sqlalchemy.orm import relationship
-from .database import Base
+from database import Base
 
 
 class Jabatan(Base):
@@ -22,4 +22,4 @@ class User(Base):
     telepon = Column(String(20))
     id_jabatan = Column(Integer, ForeignKey("jabatan.id_jabatan"))
 
-    jabatan = relationship("jabatan", back_populates="users")
+    jabatan = relationship("Jabatan", back_populates="users")
