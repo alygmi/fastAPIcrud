@@ -3,7 +3,7 @@ from sqlalchemy.orm import relationship
 from .database import Base
 
 
-class jabatan(Base):
+class Jabatan(Base):
     __tablename__ = "jabatan"
 
     id_jabatan = Column(Integer, primary_key=True, index=True)
