@@ -4,12 +4,14 @@ Proyek ini adalah implementasi sederhana dari API CRUD (Create, Read, Update, De
 
 ## Struktur Proyek
 
+```
 my_project/
 ├── database.py # Konfigurasi koneksi database PostgreSQL dengan SQLAlchemy
 ├── main.py # Definisi aplikasi FastAPI dan semua endpoint API
 ├── models.py # Definisi model database SQLAlchemy (tabel dan relasi)
 ├── schemas.py # Definisi skema data Pydantic untuk validasi dan serialisasi
 └── .env # File untuk menyimpan variabel lingkungan (misalnya, URL database)
+```
 
 ## Prasyarat
 
