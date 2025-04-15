@@ -12,6 +12,15 @@ models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
+# Endpoint untuk menambah jabatan
+@app.post("/jabatan/", response_model=schemas.Jabatan)
+def create_jabatan(jabatan: schemas.Jabatanbase, db: Session = Depends(get_db)):
+    db_jabatan = models.Jabatan(**jabatan.dict())
+    db.add(db_jabatan)
+    db.commit()
+    db.refresh(db_jabatan)
+    return db_jabatan
+
 # Endpoint untuk mendapatkan daftar semua jabatan
 
 
