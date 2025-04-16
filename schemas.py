@@ -1,39 +1,27 @@
-from pydantic import BaseModel
+from typing import Optional, List
+from pydantic import BaseModel, ConfigDict
 
-
-class Jabatanbase(BaseModel):
+class JabatanBase(BaseModel):
     nama_jabatan: str
-    deskripsi: str
+    deskripsi: Optional[str] = None
 
-
-class Jabatan(Jabatanbase):
+class Jabatan(JabatanBase):
     id_jabatan: int
-
-    class Config:
-        orm_mode = True
-
+    model_config = ConfigDict(from_attributes=True)
 
 class UserBase(BaseModel):
     nama: str
-    alamat: str
-    telepon: str
+    alamat: Optional[str] = None
+    telepon: Optional[str] = None
     id_jabatan: int
-
 
 class UserCreate(UserBase):
     pass
 
+class UserUpdate(UserBase):
+    pass
 
 class User(UserBase):
     id_user: int
-    jabatan: Jabatan
-
-    class Config:
-        orm_mode = True
-
-
-class UserUpdate(UserBase):
-    nama: str | None = None
-    alamat: str | None = None
-    telepon: str | None = None
-    id_jabatan: int | None = None
+    jabatan: Optional[Jabatan] = None
+    model_config = ConfigDict(from_attributes=True)

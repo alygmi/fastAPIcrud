@@ -2,19 +2,21 @@ from typing import List
 
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
+from redis import Redis
+from redis_config import get_redis
 
 # from . import models, schemas
 import models
 import schemas
 from database import get_db, engine
+import json
 
 models.Base.metadata.create_all(bind=engine)
-
 app = FastAPI()
 
 # Endpoint untuk menambah jabatan
 @app.post("/jabatan/", response_model=schemas.Jabatan)
-def create_jabatan(jabatan: schemas.Jabatanbase, db: Session = Depends(get_db)):
+def create_jabatan(jabatan: schemas.JabatanBase, db: Session = Depends(get_db)):
     db_jabatan = models.Jabatan(**jabatan.dict())
     db.add(db_jabatan)
     db.commit()
@@ -22,16 +24,12 @@ def create_jabatan(jabatan: schemas.Jabatanbase, db: Session = Depends(get_db)):
     return db_jabatan
 
 # Endpoint untuk mendapatkan daftar semua jabatan
-
-
 @app.get("/jabatan/", response_model=List[schemas.Jabatan])
 def read_jabatan(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     jabatan = db.query(models.Jabatan).offset(skip).limit(limit).all()
     return jabatan
 
 # endpoint untuk mendapatkan detail jabatan berdasarkan ID
-
-
 @app.get("/jabatan/{jabatan_id}", response_model=schemas.Jabatan)
 def read_jabatan_by_id(jabatan_id: int, db: Session = Depends(get_db)):
     db_jabatan = db.query(models.Jabatan).filter(
@@ -41,8 +39,6 @@ def read_jabatan_by_id(jabatan_id: int, db: Session = Depends(get_db)):
     return db_jabatan
 
 # endpoint untuk membuat user baru
-
-
 @app.post("/users/", response_model=schemas.User)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_jabatan = db.query(models.Jabatan).filter(
@@ -56,8 +52,6 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     return db_user
 
 # endpoint untuk mendapatkan semua user
-
-
 @app.get("/users/", response_model=List[schemas.User])
 def read_all_user(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     users = db.query(models.User).offset(skip).limit(limit).all()
@@ -74,8 +68,6 @@ def read_user(user_id: int, db: Session = Depends(get_db)):
     return db_user
 
 # endpoint untuk memperbarui data user berdasarkan ID
-
-
 @app.put("/users/{user_id}", response_model=schemas.User)
 def update_user(user_id: int, user: schemas.UserUpdate, db: Session = Depends(get_db)):
     db_user = db.query(models.User).filter(
@@ -100,8 +92,6 @@ def update_user(user_id: int, user: schemas.UserUpdate, db: Session = Depends(ge
     return db_user
 
 # endpoint untuk menghapus user
-
-
 @app.delete("/users/{user_id}", response_model=schemas.User)
 def delete_user(user_id: int, db: Session = Depends(get_db)):
     db_user = db.query(models.User).options(joinedload(models.User.jabatan)).filter(
@@ -111,3 +101,61 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
     db.delete(db_user)
     db.commit()
     return db_user
+
+def populate_redis_from_postgres(db: Session = Depends(get_db), redis_client: Redis = Depends(get_redis)):
+    """Memindahkan semua data User dan Jabatan dari PostgreSQL ke Redis menggunakan skema Pydantic."""
+    print("Memulai pemindahan data dari PostgreSQL ke Redis menggunakan skema Pydantic...")
+
+    # Pindahkan data Jabatan
+    jabatan_list = db.query(models.Jabatan).all()
+    for jabatan in jabatan_list:
+        key = f"jabatan:{jabatan.id_jabatan}"
+        jabatan_schema = schemas.Jabatan.from_orm(jabatan) # Membuat instance skema dari objek ORM
+        redis_client.set(key, jabatan_schema.json())
+        print(f"Jabatan ID {jabatan.id_jabatan} dipindahkan ke Redis dengan key: {key}")
+
+    # Pindahkan data User (dengan relasi Jabatan)
+    user_list = db.query(models.User).options(joinedload(models.User.jabatan)).all()
+    for user in user_list:
+        key = f"user:{user.id_user}"
+        user_schema = schemas.User.from_orm(user) # Membuat instance skema dari objek ORM
+        redis_client.set(key, user_schema.json())
+        print(f"User ID {user.id_user} dipindahkan ke Redis dengan key: {key}")
+
+    print("Pemindahan data selesai.")
+
+# endpoint pemindahan data untuk pengujian
+@app.post("/admin/populate_redis")
+async def trigger_populate_redis(db:Session = Depends(get_db), redis_client:Redis = Depends(get_redis)):    
+    populate_redis_from_postgres(db, redis_client)
+    return{"message" : "proses pemindahan data"}
+
+# endpoint menarik data jabatan dari redis
+@app.get("/redis/jabatan", response_model=list[schemas.Jabatan])
+async def read_all_jabatan_from_redis(redis_client: Redis = Depends(get_redis)):
+    jabatan_keys = redis_client.keys("jabatan:*")
+    jabatan_list = []
+    for key in jabatan_keys:
+        cached_jabatan = redis_client.get(key)
+        if cached_jabatan:
+            jabatan_data = json.loads(cached_jabatan)
+            jabatan_list.append(schemas.Jabatan(**jabatan_data))
+        return jabatan_list
+    return jabatan_list
+
+
+# endpoint mengambil data user dari redis
+@app.get("/redis/users", response_model=List[schemas.User])
+async def readAllUsersFromRedis(redis_client: Redis = Depends(get_redis)):
+    user_keys = redis_client.keys("user:*")
+    user_list = []
+    for key in user_keys:
+        cached_user = redis_client.get(key)
+        if cached_user:
+            user_data = json.loads(cached_user)
+            # reconstruct objek jabatn jika ada di cache
+            jabatan_data = user_data.get("jabatan")
+            jabatan_obj = schemas.Jabatan(**jabatan_data) if jabatan_data else None
+            user_list.append(schemas.User(jabatan=jabatan_obj, **{k: v for k, v in user_data.items() if k != "jabatan"}))
+            return user_list
+    
