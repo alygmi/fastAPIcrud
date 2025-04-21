@@ -2,7 +2,7 @@ from typing import List
 
 import random
 import time
-from typing import Dict
+from typing import Dict, Optional
 
 from fastapi import FastAPI, Depends, HTTPException, Body
 from sqlalchemy.orm import Session, joinedload
@@ -199,4 +199,20 @@ async def verify_otp(id: int = Body(..., embed=True), otp: str = Body(..., embed
         raise HTTPException(status_code=400, detail="OTP wrong")
     
 
-    
+# endpoint mencari user by ID di redis
+@app.get("/redis/users/{user_id}", response_model=Optional[schemas.User])
+async def read_user_from_redis(user_id: int, redis_client: Redis = Depends(get_redis)):
+    """Mengambil data user dari Redis berdasarkan ID."""
+    user_key = f"user:{user_id}"
+    cached_user = redis_client.get(user_key)
+
+    if cached_user:
+        print(f"Cache hit untuk user ID: {user_id}")
+        user_data = json.loads(cached_user)
+        # Rekonstruksi objek jabatan jika ada di cache
+        jabatan_data = user_data.get("jabatan")
+        jabatan_obj = schemas.Jabatan(**jabatan_data) if jabatan_data else None
+        return schemas.User(jabatan=jabatan_obj, **{k: v for k, v in user_data.items() if k != "jabatan"})
+    else:
+        print(f"Cache miss untuk user ID: {user_id}")
+        raise HTTPException(status_code=404, detail=f"User dengan ID {user_id} tidak ditemukan di cache.")
