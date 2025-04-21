@@ -13,7 +13,8 @@ redis_client = redis.StrictRedis(
     host=REDIS_HOST,
     port=REDIS_PORT,
     db=REDIS_DB,
-    password=REDIS_PASSWORD
+    password=REDIS_PASSWORD,
+    decode_responses=True
 )
 def get_redis():
     return redis_client

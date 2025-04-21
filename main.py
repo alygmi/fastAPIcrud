@@ -1,6 +1,10 @@
 from typing import List
 
-from fastapi import FastAPI, Depends, HTTPException
+import random
+import time
+from typing import Dict
+
+from fastapi import FastAPI, Depends, HTTPException, Body
 from sqlalchemy.orm import Session, joinedload
 from redis import Redis
 from redis_config import get_redis
@@ -140,7 +144,6 @@ async def read_all_jabatan_from_redis(redis_client: Redis = Depends(get_redis)):
         if cached_jabatan:
             jabatan_data = json.loads(cached_jabatan)
             jabatan_list.append(schemas.Jabatan(**jabatan_data))
-        return jabatan_list
     return jabatan_list
 
 
@@ -157,5 +160,43 @@ async def readAllUsersFromRedis(redis_client: Redis = Depends(get_redis)):
             jabatan_data = user_data.get("jabatan")
             jabatan_obj = schemas.Jabatan(**jabatan_data) if jabatan_data else None
             user_list.append(schemas.User(jabatan=jabatan_obj, **{k: v for k, v in user_data.items() if k != "jabatan"}))
-            return user_list
+    return user_list
+
+# endpoint untuk menggenerate OTP
+@app.post("/otp/generate", response_model=Dict[str, str])
+async def get_otp(id: int = Body(..., embed=True), redis_client: Redis = Depends(get_redis)):
+    otp = str(random.randint(100000, 999999))
+    otp_key = f"otp:{id}"
+    redis_client.setex(otp_key, 300, otp)
+    attempts_key = f"otp:attempts:{id}"
+    redis_client.delete(attempts_key)
+    return {"otp" : otp}
+
+# endpoint untuk memverifikasi OTP
+@app.post("/otp/verify", response_model=Dict[str, str])
+async def verify_otp(id: int = Body(..., embed=True), otp: str = Body(..., embed=True), redis_client: Redis = Depends(get_redis)):
+    otp_key = f"otp:{id}"
+    stored_otp = redis_client.get(otp_key)
+    attempts_key = f"otp:attempts:{id}"
+    attempts = redis_client.get(attempts_key)
+    max_attempts = 3
+
+    print(f"OTP dari Redis untuk ID {id}: '{stored_otp}'")
+    print(f"OTP dari request untuk ID {id}: '{otp}'")
+
+    if stored_otp is None :
+        raise HTTPException(status_code=404, detail="Error OTP")
+    
+    if attempts is not None and int(attempts) >= max_attempts:
+        redis_client.delete(otp_key)
+        raise HTTPException(status_code=429, detail="Unverified!")
+    
+    if stored_otp == otp:
+        redis_client.delete(otp_key)
+        return {"message" : "Verified"}
+    else:
+        redis_client.incr(attempts_key)
+        raise HTTPException(status_code=400, detail="OTP wrong")
+    
+
     
